@@ -52,15 +52,17 @@ residual = rs.residual_lengths(A_test, t_test, pts_s, pts_t)
 # Run RANSAC to estimate affine tansformation when
 # too many outliers in points set
 A_rsc, t_rsc, inliers = rs.ransac_fit(pts_s, pts_t)
-print(A_rsc, '\n', t_rsc)
+# print(A_rsc, '\n', t_rsc)
 
 # -------------------------------------------------------------
 # Test Class Align
 # -------------------------------------------------------------
 
 # Load source image and target image
-source_path = 'Images/mona_source.png'
-target_path = 'Images/mona_target.jpg'
+# source_path = 'Images/B.jpg'
+# target_path = 'Images/A.jpg'
+source_path = 'data/0/B.jpg'
+target_path = 'data/0/A.jpg'
 
 # Create instance
 al = Align(source_path, target_path, threshold=1)

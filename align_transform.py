@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 from affine_ransac import Ransac
 from affine_transform import Affine
-
+import os
 
 # The ration of the best match over second best match
 #      distance of best match
@@ -83,12 +83,12 @@ class Align():
 
         # Extract key points and SIFT descriptors
         sift = cv2.SIFT_create()
-        kp, desc = sift.detectAndCompute(img_gray, None)
+        list_kp, desc = sift.detectAndCompute(img_gray, None)
 
         # Extract positions of key points
-        kp = np.array([p.pt for p in kp]).T
+        kp = np.array([p.pt for p in list_kp]).T
 
-        return kp, desc
+        return kp, desc, list_kp
 
     def match_SIFT(self, desc_s, desc_t):
         ''' MATCH_SIFT
@@ -116,6 +116,8 @@ class Align():
         fit_pos = np.array([], dtype=np.int32).reshape((0, 2))
 
         matches_num = len(matches)
+        good_match = []
+        ## 寻找好的匹配点
         for i in range(matches_num):
             # Obtain the good match if the ration id smaller than 0.8
             if matches[i][0].distance <= RATIO * matches[i][1].distance:
@@ -123,8 +125,16 @@ class Align():
                                  matches[i][0].trainIdx])
                 # Put points index of good match
                 fit_pos = np.vstack((fit_pos, temp))
+                good_match.append(matches[i])
 
-        return fit_pos
+        """
+        test
+        """
+        # d1 = np.array([good_match[i][0].distance for i in range(15)])
+        # d2 = np.array([good_match[i][1].distance for i in range(15)])
+        # print(d1/d2)
+        # print(fit_pos, fit_pos.shape)
+        return fit_pos, good_match
 
     def affine_matrix(self, kp_s, kp_t, fit_pos):
         ''' AFFINE_MATRIX
@@ -159,6 +169,11 @@ class Align():
         A, t = Affine().estimate_affine(kp_s, kp_t)
         M = np.hstack((A, t))
 
+
+        """
+        test
+        """
+        # print(M, M.shape)
         return M
 
     def warp_image(self, source, target, M):
@@ -185,11 +200,17 @@ class Align():
         merge = np.uint8(target * 0.5 + warp * 0.5)
 
         # Show the result
-        cv2.imshow('img', merge)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        # cv2.imshow('img', merge)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+        img_id = os.path.split(self.source_path)[0]
+        img_id = eval(os.path.split(img_id)[1])
+        fusion_path = 'fusion'
+        cv2.imwrite(os.path.join(fusion_path, f'out_{img_id}.jpg'), merge)
 
         return
+
 
     def align_image(self):
         ''' ALIGN_IMAGE
@@ -206,16 +227,67 @@ class Align():
 
         # Extract key points and SIFT descriptors from
         # source image and target image respectively
-        kp_s, desc_s = self.extract_SIFT(img_source)
-        kp_t, desc_t = self.extract_SIFT(img_target)
+        kp_s, desc_s, list_kp_s = self.extract_SIFT(img_source)
+        kp_t, desc_t, list_kp_t = self.extract_SIFT(img_target)
 
         # Obtain the index of correcponding points
-        fit_pos = self.match_SIFT(desc_s, desc_t)
+        fit_pos, good_matches = self.match_SIFT(desc_s, desc_t)
+
+        # 绘制匹配点
+
+        good_matches.sort(key=lambda x : x[0].distance/x[1].distance)
+        # n = len(good_matches)
+        # d1 = np.array([good_matches[i][0].distance for i in range(n)])
+        # d2 = np.array([good_matches[i][1].distance for i in range(n)])
+        # score = d1/d2
+        # score = score * 255
+        # colormap = cv2.applyColorMap(score.astype(np.uint8), cv2.COLORMAP_JET)
+        # print(colormap)
+        out_img = cv2.drawMatchesKnn(img_source, list_kp_s, img_target, list_kp_t, good_matches[:100], None, flags=2)
 
         # Compute the affine transformation matrix
         M = self.affine_matrix(kp_s, kp_t, fit_pos)
-
-        # Warp the source image and display result
+        # # Warp the source image and display result
         self.warp_image(img_source, img_target, M)
+        # cv2.namedWindow("image", 0)
+        # cv2.resizeWindow("image", 1920, 540)
+        # cv2.imshow('image', out_img)  # 展示图片
+        # cv2.waitKey(0)  # 等待按键按下
+        # cv2.destroyAllWindows()  # 清除所有窗口
+        # img_dir = os.path.split(self.source_path)[0]
+        img_id = os.path.split(self.source_path)[0]
+        img_id = eval(os.path.split(img_id)[1])
+        out_dir = 'out'
+        cv2.imwrite(os.path.join(out_dir, f'out_{img_id}.jpg'), out_img)
+        with open('result.txt', "a+") as f:
+            line = f'{M[0, 0]} {M[0, 1]} {M[0, 2]} {M[1, 0]} {M[1, 1]} {M[1, 2]} 0 0 1\n'
+            f.write(line)
 
         return
+
+if __name__ == '__main__':
+    # source_path = 'data/0/B.jpg'
+    # target_path = 'data/0/A.jpg'
+    """
+    重点图片
+    """
+    # pathes = [os.path.join('data', i) for i in ['33', '75', '95']]
+    pathes = [os.path.join('data', str(i)) for i in range(100)]
+    for path in pathes:
+        source_path = os.path.join(path, 'B.jpg')
+        target_path = os.path.join(path, 'A.jpg')
+        print(path)
+        # Create instance
+        al = Align(source_path, target_path, threshold=1)
+        # Image transformation
+        # al.align_image()
+        try:
+            al.align_image()
+        except:
+            # 33 75 95无法检测
+            print("算法无法检测")
+            with open('result.txt', "a+") as f:
+                line = f'该图片提取特征点数量不够\n'
+                f.write(line)
+
+
