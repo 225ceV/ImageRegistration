@@ -14,7 +14,7 @@ ITER_NUM = 2000
 
 class Ransac():
 
-    def __init__(self, K=3, threshold=1):
+    def __init__(self, K=3, threshold=0.1):
         ''' __INIT__
 
             Initialize the instance.
@@ -97,7 +97,7 @@ class Ransac():
         A = None
         t = None
         inliers = None
-
+        mask = []
         for i in range(ITER_NUM):
             # Randomly generate indices of points correspondences
             idx = np.random.randint(0, pts_s.shape[1], (self.K, 1))
@@ -110,6 +110,9 @@ class Ransac():
             if not(residual is None):
                 # Obtain the indices of inliers
                 inliers_tmp = np.where(residual < self.threshold)
+                mask_tmp = [[1] if i else [0] for i in residual < self.threshold]
+                mask_tmp = [1 if i else 0 for i in residual < self.threshold]
+
                 # Obtain the number of inliers
                 inliers_num_tmp = len(inliers_tmp[0])
 
@@ -122,7 +125,8 @@ class Ransac():
                     inliers = inliers_tmp
                     A = A_tmp
                     t = t_tmp
+                    mask = mask_tmp
             else:
                 pass
 
-        return A, t, inliers
+        return A, t, inliers, mask

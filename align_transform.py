@@ -20,7 +20,7 @@ import time
 class Align():
 
     def __init__(self, source_path, target_path,
-                 K=3, threshold=1):
+                 K=3, threshold=0.5):
         ''' __INIT__
 
             Initialize the instance.
@@ -109,7 +109,6 @@ class Align():
             Output:
 
             - fit_pos : index of corresponding points
-
         '''
 
         # Match descriptor and obtain two best matches
@@ -122,14 +121,21 @@ class Align():
         matches_num = len(matches)
         good_match = []
         ## 寻找好的匹配点
-        for i in range(matches_num):
-            # Obtain the good match if the ration id smaller than 0.8
-            if matches[i][0].distance <= RATIO * matches[i][1].distance:
-                temp = np.array([matches[i][0].queryIdx,
-                                 matches[i][0].trainIdx])
-                # Put points index of good match
+        # for i in range(matches_num):
+        #     # Obtain the good match if the ration id smaller than 0.8
+        #     if matches[i][0].distance <= RATIO * matches[i][1].distance:
+        #         temp = np.array([matches[i][0].queryIdx,
+        #                          matches[i][0].trainIdx])
+        #         # Put points index of good match
+        #         fit_pos = np.vstack((fit_pos, temp))
+        #         good_match.append(matches[i])
+        for m, n in matches:
+            if m.distance < RATIO * n.distance:
+                temp = np.array([m.queryIdx, m.trainIdx])
                 fit_pos = np.vstack((fit_pos, temp))
-                good_match.append(matches[i])
+                # good_match.append((m, n))
+                good_match.append(m)
+
 
         """
         test
@@ -163,7 +169,7 @@ class Align():
         kp_t = kp_t[:, fit_pos[:, 1]]
 
         # Apply RANSAC to find most inliers
-        _, _, inliers = Ransac(self.K, self.threshold).ransac_fit(kp_s, kp_t)
+        _, _, inliers, mask = Ransac(self.K, self.threshold).ransac_fit(kp_s, kp_t)
 
         # Extract all inliers from all key points
         kp_s = kp_s[:, inliers[0]]
@@ -174,7 +180,7 @@ class Align():
         M = np.hstack((A, t))
 
 
-        return M
+        return M, mask
 
     def warp_image(self, source, target, M):
         ''' WARP_IMAGE
@@ -216,6 +222,10 @@ class Align():
     def dehazed(self, img):
         return dehaze(img)  # float64
 
+    def cv2_affine_matrix(self, kp_s, kp_t, fit_pos):
+
+        return
+
     def align_image(self):
         ''' ALIGN_IMAGE
 
@@ -229,11 +239,11 @@ class Align():
         img_tgt = self.read_image(self.target_path)
         self.tik = time.time()
         ## 去雾
-        img_src = self.dehazed(img_src)
-        img_tgt = self.dehazed(img_tgt)
+        img_source = self.dehazed(img_src)
+        img_target = self.dehazed(img_tgt)
         ## 边缘提取
-        img_source = cv2.Canny(img_src, 100, 200)
-        img_target = cv2.Canny(img_tgt, 100, 200)
+        # img_source = cv2.Canny(img_src, 100, 200)
+        # img_target = cv2.Canny(img_tgt, 100, 200)
         # Extract key points and SIFT descriptors from
         # source image and target image respectively
         kp_s, desc_s, list_kp_s = self.extract_SIFT(img_source)
@@ -244,13 +254,15 @@ class Align():
         # good_matches.sort(key=lambda x : x[0].distance/x[1].distance)     # 合理性存疑
 
         # Compute the affine transformation matrix
-        M = self.affine_matrix(kp_s, kp_t, fit_pos)
+        M, mask = self.affine_matrix(kp_s, kp_t, fit_pos)
         self.tok = time.time()
         registration_time = self.tok-self.tik
         # print(f"Registration Time: {self.tok-self.tik:.4f}s")
         # # Warp the source image and display result
-        out_img = cv2.drawMatchesKnn(img_source, list_kp_s, img_target, list_kp_t, good_matches[:100], None, flags=2)
-        self.warp_image(img_src, img_tgt, M)   # imwrite
+        # out_img = cv2.drawMatchesKnn(img_source, list_kp_s, img_target, list_kp_t, good_matches, None, matchesMask=mask, flags=2)
+        out_img = cv2.drawMatches(img_source, list_kp_s, img_target, list_kp_t, good_matches, None, matchesMask=mask,
+                                     flags=2)
+        self.warp_image(img_source, img_target, M)   # imwrite
         # cv2.namedWindow("image", 0)
         # cv2.resizeWindow("image", 1920, 540)
         # cv2.imshow('image', out_img)  # 展示图片
