@@ -59,8 +59,8 @@ A_rsc, t_rsc, inliers = rs.ransac_fit(pts_s, pts_t)
 # -------------------------------------------------------------
 
 # Load source image and target image
-# source_path = 'Images/B.jpg'
-# target_path = 'Images/A.jpg'
+# source_path = 'Images/33_B.jpg'
+# target_path = 'Images/33_A.jpg'
 source_path = 'data/0/B.jpg'
 target_path = 'data/0/A.jpg'
 

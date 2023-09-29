@@ -9,13 +9,13 @@ import numpy as np
 from affine_ransac import Ransac
 from affine_transform import Affine
 import os
-
+from img_dehaze import *
 # The ration of the best match over second best match
 #      distance of best match
 # ------------------------------- <= MATCH_RATIO
 #  distance of second best match
 RATIO = 0.8
-
+import time
 
 class Align():
 
@@ -40,6 +40,8 @@ class Align():
         self.target_path = target_path
         self.K = K
         self.threshold = threshold
+        self.tik = None
+        self.tok = None
 
     def read_image(self, path, mode=1):
         ''' READ_IMAGE
@@ -79,8 +81,10 @@ class Align():
         '''
 
         # Convert the image to grayscale
-        img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
+        if len(img.shape) == 3:
+            img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        else:
+            img_gray = img
         # Extract key points and SIFT descriptors
         sift = cv2.SIFT_create()
         list_kp, desc = sift.detectAndCompute(img_gray, None)
@@ -170,10 +174,6 @@ class Align():
         M = np.hstack((A, t))
 
 
-        """
-        test
-        """
-        # print(M, M.shape)
         return M
 
     def warp_image(self, source, target, M):
@@ -191,8 +191,10 @@ class Align():
         '''
 
         # Obtain the size of target image
-        rows, cols, _ = target.shape
-
+        if len(target.shape) == 3:
+            rows, cols, _ = target.shape
+        else:
+            rows, cols = target.shape
         # Warp the source image
         warp = cv2.warpAffine(source, M, (cols, rows))
 
@@ -211,6 +213,8 @@ class Align():
 
         return
 
+    def dehazed(self, img):
+        return dehaze(img)  # float64
 
     def align_image(self):
         ''' ALIGN_IMAGE
@@ -220,11 +224,16 @@ class Align():
             instance Align() is created.
 
         '''
-
         # Load source image and target image
-        img_source = self.read_image(self.source_path)
-        img_target = self.read_image(self.target_path)
-
+        img_src = self.read_image(self.source_path)
+        img_tgt = self.read_image(self.target_path)
+        self.tik = time.time()
+        ## 去雾
+        img_src = self.dehazed(img_src)
+        img_tgt = self.dehazed(img_tgt)
+        ## 边缘提取
+        img_source = cv2.Canny(img_src, 100, 200)
+        img_target = cv2.Canny(img_tgt, 100, 200)
         # Extract key points and SIFT descriptors from
         # source image and target image respectively
         kp_s, desc_s, list_kp_s = self.extract_SIFT(img_source)
@@ -232,23 +241,16 @@ class Align():
 
         # Obtain the index of correcponding points
         fit_pos, good_matches = self.match_SIFT(desc_s, desc_t)
-
-        # 绘制匹配点
-
-        good_matches.sort(key=lambda x : x[0].distance/x[1].distance)
-        # n = len(good_matches)
-        # d1 = np.array([good_matches[i][0].distance for i in range(n)])
-        # d2 = np.array([good_matches[i][1].distance for i in range(n)])
-        # score = d1/d2
-        # score = score * 255
-        # colormap = cv2.applyColorMap(score.astype(np.uint8), cv2.COLORMAP_JET)
-        # print(colormap)
-        out_img = cv2.drawMatchesKnn(img_source, list_kp_s, img_target, list_kp_t, good_matches[:100], None, flags=2)
+        # good_matches.sort(key=lambda x : x[0].distance/x[1].distance)     # 合理性存疑
 
         # Compute the affine transformation matrix
         M = self.affine_matrix(kp_s, kp_t, fit_pos)
+        self.tok = time.time()
+        registration_time = self.tok-self.tik
+        # print(f"Registration Time: {self.tok-self.tik:.4f}s")
         # # Warp the source image and display result
-        self.warp_image(img_source, img_target, M)
+        out_img = cv2.drawMatchesKnn(img_source, list_kp_s, img_target, list_kp_t, good_matches[:100], None, flags=2)
+        self.warp_image(img_src, img_tgt, M)   # imwrite
         # cv2.namedWindow("image", 0)
         # cv2.resizeWindow("image", 1920, 540)
         # cv2.imshow('image', out_img)  # 展示图片
@@ -263,31 +265,34 @@ class Align():
             line = f'{M[0, 0]} {M[0, 1]} {M[0, 2]} {M[1, 0]} {M[1, 1]} {M[1, 2]} 0 0 1\n'
             f.write(line)
 
-        return
+        self.tok = time.time()
+        total_time = self.tok - self.tik
+        return registration_time, total_time
 
 if __name__ == '__main__':
-    # source_path = 'data/0/B.jpg'
-    # target_path = 'data/0/A.jpg'
-    """
-    重点图片
-    """
-    # pathes = [os.path.join('data', i) for i in ['33', '75', '95']]
-    pathes = [os.path.join('data', str(i)) for i in range(100)]
+    # source_path = 'data/0/33_B.jpg'
+    # target_path = 'data/0/33_A.jpg'
+    # pathes = [os.path.join('data', i) for i in ['33', '75', '95']]  # 重点图片
+    pathes = [os.path.join('data', str(i)) for i in range(100)]    # 全部图片
+    registration_time_list = []
+    total_time_list = []
     for path in pathes:
         source_path = os.path.join(path, 'B.jpg')
         target_path = os.path.join(path, 'A.jpg')
-        print(path)
+        print(f'正在处理图像路径：{path}')
         # Create instance
         al = Align(source_path, target_path, threshold=1)
         # Image transformation
         # al.align_image()
         try:
-            al.align_image()
+            registration_time, total_time = al.align_image()
+            registration_time_list.append(registration_time)
+            total_time_list.append(total_time)
         except:
             # 33 75 95无法检测
             print("算法无法检测")
             with open('result.txt', "a+") as f:
                 line = f'该图片提取特征点数量不够\n'
                 f.write(line)
-
+    print(f'总用时{sum(total_time_list):.3f}s, 配准净时长{sum(registration_time_list):.3f}s')
 
