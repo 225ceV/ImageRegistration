@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="ProjectRootManager" version="2" project-jdk-name="yolov5" project-jdk-type="Python SDK" />
+  <component name="Black">
+    <option name="enabledOnReformat" value="true" />
+    <option name="executionMode" value="BINARY" />
+    <option name="pathToExecutable" value="D:\ProgramData\anaconda3\Scripts\black.exe" />
+    <option name="sdkUUID" value="389e3c1e-de3f-4dd6-b42f-d80288bda885" />
+  </component>
+  <component name="ProjectRootManager" version="2" project-jdk-name="opencv-old" project-jdk-type="Python SDK" />
+  <component name="PyPackaging">
+    <option name="earlyReleasesAsUpgrades" value="true" />
+  </component>
 </project>
